@@ -465,3 +465,91 @@ class AuditLog(db.Model):
         Index("idx_audit_action", "action"),
         Index("idx_audit_recorded", "recorded_at"),
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DESKTOP DEVICES & PREDICTIVE TRANSITIONS
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Device(db.Model, TimestampMixin):
+    __tablename__ = "devices"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    device_name = Column(String(100), nullable=False)
+    device_type = Column(String(50), nullable=False, default="desktop")
+    client_version = Column(String(50), nullable=False, default="1.0.0")
+    device_fingerprint = Column(String(255), nullable=False, unique=True, index=True)
+    is_authorized = Column(Boolean, nullable=False, default=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    system_info = Column(JSON, nullable=False, default=dict)
+    status = Column(String(20), nullable=False, default="offline")
+
+    user = relationship("User", backref=backref("devices", cascade="all, delete-orphan"))
+
+    __table_args__ = (
+        Index("idx_device_user", "user_id"),
+        Index("idx_device_status", "status"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "device_name": self.device_name,
+            "device_type": self.device_type,
+            "client_version": self.client_version,
+            "device_fingerprint": self.device_fingerprint,
+            "is_authorized": self.is_authorized,
+            "last_seen_at": self.last_seen_at.isoformat() if self.last_seen_at else None,
+            "ip_address": self.ip_address,
+            "system_info": self.system_info,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class PredictionEvent(db.Model, TimestampMixin):
+    __tablename__ = "prediction_events"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    current_resource_id = Column(String(100), nullable=False, index=True)
+    predicted_resource_id = Column(String(100), nullable=False, index=True)
+    prediction_score = Column(Float, nullable=False, default=0.5)
+    reason = Column(String(255), nullable=False)
+    prefetch_status = Column(String(30), nullable=False, default="queued")
+    latency_saved_ms = Column(Float, nullable=True, default=0.0)
+
+    user = relationship("User", backref=backref("predictions", cascade="all, delete-orphan"))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "current_resource_id": self.current_resource_id,
+            "predicted_resource_id": self.predicted_resource_id,
+            "prediction_score": round(self.prediction_score, 2),
+            "reason": self.reason,
+            "prefetch_status": self.prefetch_status,
+            "latency_saved_ms": self.latency_saved_ms,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ResourceTransition(db.Model, TimestampMixin):
+    __tablename__ = "resource_transitions"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    from_resource_id = Column(String(100), nullable=False)
+    to_resource_id = Column(String(100), nullable=False)
+    transition_count = Column(Integer, nullable=False, default=1)
+    last_transition_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "from_resource_id", "to_resource_id", name="uq_user_resource_transition"),
+        Index("idx_transition_lookup", "user_id", "from_resource_id"),
+    )
+

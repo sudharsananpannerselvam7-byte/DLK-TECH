@@ -625,3 +625,206 @@ def audit_logs():
         } for l in logs],
         meta={"total": total, "page": page},
     )
+
+
+# ── Devices API ──────────────────────────────────────────────────────────────
+devices_bp = Blueprint("devices", __name__, url_prefix="/api/v1/devices")
+
+@devices_bp.route("/register", methods=["POST"])
+@jwt_required()
+def register_device():
+    from app.models import Device
+    from datetime import datetime, timezone
+    user_id = get_jwt_identity()
+    data = request.get_json() or {}
+
+    fingerprint = data.get("device_fingerprint")
+    if not fingerprint:
+        return error_response("device_fingerprint is required.", "VALIDATION_ERROR", 400)
+
+    device = Device.query.filter_by(user_id=user_id, device_fingerprint=fingerprint).first()
+    if not device:
+        device = Device(
+            user_id=user_id,
+            device_name=data.get("device_name", "Desktop Station"),
+            device_type=data.get("device_type", "desktop"),
+            client_version=data.get("client_version", "1.0.0"),
+            device_fingerprint=fingerprint,
+            system_info=data.get("system_info", {}),
+            ip_address=request.remote_addr,
+            status="online",
+            last_seen_at=datetime.now(timezone.utc),
+        )
+        db.session.add(device)
+    else:
+        device.device_name = data.get("device_name", device.device_name)
+        device.client_version = data.get("client_version", device.client_version)
+        device.system_info = data.get("system_info", device.system_info)
+        device.ip_address = request.remote_addr
+        device.status = "online"
+        device.last_seen_at = datetime.now(timezone.utc)
+
+    db.session.commit()
+    return success_response(data=device.to_dict(), message="Device registered successfully.")
+
+@devices_bp.route("", methods=["GET"])
+@jwt_required()
+def list_devices():
+    from app.models import Device
+    user_id = get_jwt_identity()
+    devices = Device.query.filter_by(user_id=user_id).order_by(Device.created_at.desc()).all()
+    return success_response(data=[d.to_dict() for d in devices])
+
+@devices_bp.route("/<device_id>", methods=["PATCH"])
+@jwt_required()
+def update_device(device_id):
+    from app.models import Device
+    user_id = get_jwt_identity()
+    device = Device.query.filter_by(id=device_id, user_id=user_id).first()
+    if not device:
+        return error_response("Device not found.", "NOT_FOUND", 404)
+
+    data = request.get_json() or {}
+    if "device_name" in data:
+        device.device_name = data["device_name"]
+    if "is_authorized" in data:
+        device.is_authorized = bool(data["is_authorized"])
+
+    db.session.commit()
+    return success_response(data=device.to_dict(), message="Device updated.")
+
+@devices_bp.route("/<device_id>", methods=["DELETE"])
+@jwt_required()
+def revoke_device(device_id):
+    from app.models import Device
+    user_id = get_jwt_identity()
+    device = Device.query.filter_by(id=device_id, user_id=user_id).first()
+    if not device:
+        return error_response("Device not found.", "NOT_FOUND", 404)
+
+    db.session.delete(device)
+    db.session.commit()
+    return success_response(message="Device revoked successfully.")
+
+@devices_bp.route("/<device_id>/heartbeat", methods=["POST"])
+@jwt_required()
+def device_heartbeat(device_id):
+    from app.models import Device
+    from datetime import datetime, timezone
+    user_id = get_jwt_identity()
+    device = Device.query.filter_by(id=device_id, user_id=user_id).first()
+    if not device:
+        return error_response("Device not found.", "NOT_FOUND", 404)
+
+    device.last_seen_at = datetime.now(timezone.utc)
+    device.status = "online"
+    device.ip_address = request.remote_addr
+    db.session.commit()
+    return success_response(data={"status": "online", "last_seen_at": device.last_seen_at.isoformat()})
+
+
+# ── Predictions API ──────────────────────────────────────────────────────────
+predictions_bp = Blueprint("predictions", __name__, url_prefix="/api/v1/predictions")
+
+@predictions_bp.route("", methods=["GET"])
+@jwt_required()
+def get_predictions():
+    from app.models import PredictionEvent
+    user_id = get_jwt_identity()
+    limit = min(50, int(request.args.get("limit", 10)))
+    events = (
+        PredictionEvent.query.filter_by(user_id=user_id)
+        .order_by(PredictionEvent.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return success_response(data=[e.to_dict() for e in events])
+
+@predictions_bp.route("/predict", methods=["POST"])
+@jwt_required()
+def predict_next_resource():
+    from app.models import ResourceTransition, PredictionEvent, Content
+    user_id = get_jwt_identity()
+    data = request.get_json() or {}
+    curr_id = data.get("current_resource_id")
+    if not curr_id:
+        return error_response("current_resource_id is required.", "VALIDATION_ERROR", 400)
+
+    # 1. Look up empirical sequential transition
+    transition = (
+        ResourceTransition.query.filter_by(user_id=user_id, from_resource_id=curr_id)
+        .order_by(ResourceTransition.transition_count.desc())
+        .first()
+    )
+
+    if transition and transition.transition_count >= 2:
+        predicted_id = transition.to_resource_id
+        score = min(0.95, 0.5 + (transition.transition_count * 0.1))
+        target_item = Content.query.filter_by(id=predicted_id).first()
+        target_name = target_item.title if target_item else predicted_id
+        reason = f"Frequently accessed after current resource ({transition.transition_count} prior sequential visits)"
+    else:
+        # Fallback to next chronological or popular resource
+        next_item = Content.query.filter(Content.id != curr_id).order_by(Content.view_count.desc()).first()
+        if next_item:
+            predicted_id = next_item.id
+            score = 0.65
+            reason = f"High general playlist confidence: '{next_item.title}'"
+        else:
+            predicted_id = curr_id
+            score = 0.30
+            reason = "Default queue lookahead candidate"
+
+    pred_event = PredictionEvent(
+        user_id=user_id,
+        current_resource_id=curr_id,
+        predicted_resource_id=predicted_id,
+        prediction_score=score,
+        reason=reason,
+        prefetch_status="queued",
+        latency_saved_ms=round(score * 45.0, 1),
+    )
+    db.session.add(pred_event)
+    db.session.commit()
+
+    return success_response(data=pred_event.to_dict(), message="Prediction calculated.")
+
+@predictions_bp.route("/transition", methods=["POST"])
+@jwt_required()
+def record_transition():
+    from app.models import ResourceTransition
+    from datetime import datetime, timezone
+    user_id = get_jwt_identity()
+    data = request.get_json() or {}
+    from_id = data.get("from_resource_id")
+    to_id = data.get("to_resource_id")
+
+    if not from_id or not to_id:
+        return error_response("Both from_resource_id and to_resource_id are required.", "VALIDATION_ERROR", 400)
+
+    trans = ResourceTransition.query.filter_by(
+        user_id=user_id, from_resource_id=from_id, to_resource_id=to_id
+    ).first()
+
+    if trans:
+        trans.transition_count += 1
+        trans.last_transition_at = datetime.now(timezone.utc)
+    else:
+        trans = ResourceTransition(
+            user_id=user_id,
+            from_resource_id=from_id,
+            to_resource_id=to_id,
+            transition_count=1,
+            last_transition_at=datetime.now(timezone.utc),
+        )
+        db.session.add(trans)
+
+    db.session.commit()
+    return success_response(
+        data={
+            "from_resource_id": from_id,
+            "to_resource_id": to_id,
+            "transition_count": trans.transition_count,
+        },
+        message="Transition recorded.",
+    )

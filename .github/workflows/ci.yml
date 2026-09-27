@@ -1,0 +1,101 @@
+name: SmartFlow CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend-tests:
+    name: Backend Test Suite (Flask, Pytest, Adapters)
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install flake8 pytest pytest-cov
+
+      - name: Run lint
+        run: |
+          flake8 backend/app --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run Backend Unit & Integration Tests
+        env:
+          FLASK_ENV: testing
+          DATABASE_URL: sqlite:///:memory:
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key-continuous-integration
+          JWT_SECRET_KEY: test-jwt-secret-key-ci
+        run: |
+          cd backend
+          pytest -v tests/test_api.py
+
+  desktop-agent-tests:
+    name: Desktop Local Agent Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install pytest requests psutil
+
+      - name: Run Desktop Agent Tests
+        run: |
+          cd desktop
+          pytest -v tests/test_agent.py
+
+  frontend-build:
+    name: Frontend Build & Type Check (Next.js 16)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Type check & production build
+        run: |
+          cd frontend
+          npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://api.smartflow.local/api/v1
+          NEXT_TELEMETRY_DISABLED: 1

@@ -18,8 +18,11 @@ const NAV_ITEMS = [
   { href: '/dashboard/network', icon: '📡', label: 'Network Monitor' },
   { href: '/dashboard/jobs', icon: '⚙', label: 'Processing Jobs' },
   { type: 'divider', label: 'MANAGEMENT' },
+  { href: '/dashboard/devices', icon: '💻', label: 'Devices' },
   { href: '/dashboard/sources', icon: '🔌', label: 'Sources' },
   { href: '/dashboard/storage', icon: '💾', label: 'Storage' },
+  { href: '/dashboard/settings', icon: '⚙', label: 'Settings' },
+  { href: '/dashboard/privacy', icon: '🔒', label: 'Privacy' },
   { href: '/dashboard/profile', icon: '👤', label: 'Profile' },
   { href: '/dashboard/admin', icon: '🛡', label: 'Admin', roles: ['admin'] },
 ];

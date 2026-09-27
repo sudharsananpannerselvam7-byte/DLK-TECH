@@ -63,14 +63,14 @@ def create_app(env: str = None) -> Flask:
         health_bp, auth_bp, content_bp, analytics_bp,
         sources_bp, jobs_bp, search_bp, feed_bp,
         cache_bp, prefetch_bp, network_bp, storage_bp,
-        users_bp, admin_bp,
+        users_bp, admin_bp, devices_bp, predictions_bp,
     )
 
     for bp in [
         health_bp, auth_bp, content_bp, analytics_bp,
         sources_bp, jobs_bp, search_bp, feed_bp,
         cache_bp, prefetch_bp, network_bp, storage_bp,
-        users_bp, admin_bp,
+        users_bp, admin_bp, devices_bp, predictions_bp,
     ]:
         app.register_blueprint(bp)
 

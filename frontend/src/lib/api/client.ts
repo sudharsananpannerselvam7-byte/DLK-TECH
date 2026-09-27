@@ -410,5 +410,37 @@ export interface OverviewStats {
   storage?: { total_bytes: number };
 }
 
+export const apiClient = {
+  get: <T = any>(path: string) => {
+    const fullPath = path.startsWith('/api/v1') ? path : `/api/v1${path.startsWith('/') ? path : '/' + path}`;
+    return apiRequest<T>(fullPath, { method: 'GET' });
+  },
+  post: <T = any>(path: string, body?: any) => {
+    const fullPath = path.startsWith('/api/v1') ? path : `/api/v1${path.startsWith('/') ? path : '/' + path}`;
+    return apiRequest<T>(fullPath, { method: 'POST', body: body ? JSON.stringify(body) : undefined });
+  },
+  patch: <T = any>(path: string, body?: any) => {
+    const fullPath = path.startsWith('/api/v1') ? path : `/api/v1${path.startsWith('/') ? path : '/' + path}`;
+    return apiRequest<T>(fullPath, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined });
+  },
+  delete: <T = any>(path: string) => {
+    const fullPath = path.startsWith('/api/v1') ? path : `/api/v1${path.startsWith('/') ? path : '/' + path}`;
+    return apiRequest<T>(fullPath, { method: 'DELETE' });
+  },
+};
+
+export const devicesApi = {
+  list: () => apiClient.get<any[]>('/devices'),
+  register: (data: any) => apiClient.post('/devices/register', data),
+  update: (id: string, data: any) => apiClient.patch(`/devices/${id}`, data),
+  revoke: (id: string) => apiClient.delete(`/devices/${id}`),
+};
+
+export const predictionsApi = {
+  list: () => apiClient.get<any[]>('/predictions'),
+  predict: (current_resource_id: string) => apiClient.post('/predictions/predict', { current_resource_id }),
+  recordTransition: (from_id: string, to_id: string) => apiClient.post('/predictions/transition', { from_resource_id: from_id, to_resource_id: to_id }),
+};
+
 export { ApiError };
-export default { authApi, contentApi, feedApi, searchApi, analyticsApi, sourcesApi, jobsApi, cacheApi, prefetchApi, networkApi, adminApi, healthApi, storageApi, usersApi };
+export default apiClient;

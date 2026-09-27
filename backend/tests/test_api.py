@@ -357,3 +357,72 @@ class TestResponseFormat:
         assert "message" in data
         assert "error_code" in data
         assert "request_id" in data
+
+
+class TestDevices:
+    """Device registration and management tests."""
+
+    def test_list_devices_requires_auth(self, client):
+        resp = client.get("/api/v1/devices")
+        assert resp.status_code == 401
+
+    def test_register_device(self, client, auth_headers):
+        payload = {
+            "device_name": "Test Laptop",
+            "device_type": "laptop",
+            "device_fingerprint": "fingerprint-xyz-12345",
+            "client_version": "1.0.0",
+        }
+        resp = client.post("/api/v1/devices/register", json=payload, headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.get_json()["data"]
+        assert data["device_name"] == "Test Laptop"
+        assert data["device_fingerprint"] == "fingerprint-xyz-12345"
+
+        # List devices
+        list_resp = client.get("/api/v1/devices", headers=auth_headers)
+        assert list_resp.status_code == 200
+        assert len(list_resp.get_json()["data"]) >= 1
+
+
+class TestPredictions:
+    """Sequential transition and prediction engine tests."""
+
+    def test_predictions_requires_auth(self, client):
+        resp = client.get("/api/v1/predictions")
+        assert resp.status_code == 401
+
+    def test_predict_and_transition(self, client, auth_headers):
+        # Record transitions: resource-A -> resource-B (twice)
+        trans_payload = {
+            "from_resource_id": "resource-A",
+            "to_resource_id": "resource-B",
+        }
+        resp1 = client.post("/api/v1/predictions/transition", json=trans_payload, headers=auth_headers)
+        assert resp1.status_code == 200
+        resp2 = client.post("/api/v1/predictions/transition", json=trans_payload, headers=auth_headers)
+        assert resp2.status_code == 200
+        assert resp2.get_json()["data"]["transition_count"] == 2
+
+        # Query prediction for resource-A
+        pred_resp = client.post(
+            "/api/v1/predictions/predict",
+            json={"current_resource_id": "resource-A"},
+            headers=auth_headers,
+        )
+        assert pred_resp.status_code == 200
+        pred_data = pred_resp.get_json()["data"]
+        assert pred_data["predicted_resource_id"] == "resource-B"
+        assert pred_data["prediction_score"] >= 0.70
+        assert "Frequently accessed" in pred_data["reason"]
+
+
+class TestGitHubAdapter:
+    """Verify GitHub connector adapter."""
+
+    def test_github_adapter_init(self):
+        from app.integrations.adapters.github_adapter import GitHubAdapter
+        adapter = GitHubAdapter("sudharsananpannerselvam7-byte/DLK-TECH")
+        assert adapter.get_name() == "github"
+        assert adapter.repo == "sudharsananpannerselvam7-byte/DLK-TECH"
+
