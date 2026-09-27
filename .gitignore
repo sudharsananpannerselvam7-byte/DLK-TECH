@@ -27,6 +27,7 @@ dist/
 .env.production.local
 *.pem
 service_account.json
+tools/*.exe
 
 # Storage & Uploads
 uploads/
