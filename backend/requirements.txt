@@ -1,0 +1,59 @@
+# Core Flask
+Flask==3.1.1
+Flask-CORS==5.0.1
+Flask-JWT-Extended==4.7.1
+Flask-Migrate==4.1.0
+Flask-SQLAlchemy==3.1.1
+Flask-Limiter==3.12.0
+Werkzeug==3.1.3
+
+# Database
+SQLAlchemy==2.0.41
+alembic==1.16.1
+psycopg2-binary==2.9.10
+
+# Redis & Caching
+redis==5.2.1
+fakeredis==2.28.1
+hiredis==3.1.1
+
+# Background Workers
+celery==5.5.2
+kombu==5.5.2
+
+# Media Processing
+ffmpeg-python==0.2.0
+
+# HTTP & APIs
+requests==2.32.3
+httpx==0.28.1
+google-auth==2.40.0
+google-auth-oauthlib==1.2.1
+google-api-python-client==2.171.0
+
+# Validation & Serialization
+marshmallow==3.26.1
+pydantic==2.11.4
+email-validator==2.2.0
+
+# Security
+bcrypt==4.3.0
+cryptography==44.0.3
+PyJWT==2.10.1
+python-dotenv==1.1.0
+
+# Utilities
+Pillow==11.2.1
+click==8.1.8
+python-slugify==8.0.4
+structlog==25.3.0
+
+# Testing
+pytest==8.3.5
+pytest-flask==1.3.0
+pytest-cov==6.1.0
+pytest-mock==3.14.0
+Faker==37.3.0
+
+# Performance
+gunicorn==23.0.0
